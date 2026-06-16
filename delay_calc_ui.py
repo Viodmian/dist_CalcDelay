@@ -59,6 +59,7 @@ CONFIDENCE_OK = 0.75
 CONFIDENCE_WARN = 0.45
 APP_VERSION = "v1.1.0"
 APP_NAME = "DelayScope"
+APP_USER_MODEL_ID = "Viodmian.DelayScope.Desktop"
 
 # Log / 输出限制，避免文本过大导致拖动/缩放卡顿
 MAX_LOG_ENTRIES = 50
@@ -76,6 +77,17 @@ def _bundled_resource_path(relative_path: str):
     except Exception:
         pass
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
+
+
+def _configure_windows_taskbar_identity():
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+    except Exception:
+        pass
 
 
 def _configure_matplotlib_fonts():
@@ -460,6 +472,7 @@ class DelayCalcApp:
 
         ctk.set_appearance_mode("light")
         ctk.set_default_color_theme("blue")
+        _configure_windows_taskbar_identity()
 
         self.root = ctk.CTk()
         self.root.title(f"{APP_NAME} {APP_VERSION}")
@@ -567,17 +580,20 @@ class DelayCalcApp:
             return None
 
     def _apply_window_icon(self, window):
+        applied = False
         ico_path = _bundled_resource_path(LOGO_ICO_RELATIVE_PATH)
         if os.path.isfile(ico_path):
             try:
                 window.iconbitmap(ico_path)
-                return
+                applied = True
             except Exception:
                 pass
 
-        png_path = _bundled_resource_path(LOGO_PNG_RELATIVE_PATH)
+        png_path = _bundled_resource_path(LOGO_REPORT_RELATIVE_PATH)
         if not os.path.isfile(png_path):
-            return
+            png_path = _bundled_resource_path(LOGO_PNG_RELATIVE_PATH)
+        if not os.path.isfile(png_path):
+            return applied
         try:
             icon_image = tk.PhotoImage(file=png_path)
             window.iconphoto(True, icon_image)
@@ -585,8 +601,10 @@ class DelayCalcApp:
                 self._window_icon_image = icon_image
             else:
                 window._window_icon_image = icon_image
+            applied = True
         except Exception:
             pass
+        return applied
 
     def _set_text_state(self, ctk_textbox, state: str):
         """确保对内部 tk.Text 设置 state，避免 CTk 封装差异导致 tag 无效。"""
