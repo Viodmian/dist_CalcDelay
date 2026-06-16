@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Delay 计算 UI — 圆角卡片 + 蓝色主色（customtkinter）
+DelayScope UI — 圆角卡片 + 蓝色主色（customtkinter）
 """
 import os
 import sys
@@ -50,6 +50,7 @@ PLOT_COLORS = ["#007AFF", "#FF3B30", "#34C759", "#FF9500", "#5AC8FA", "#5856D6",
 CONFIDENCE_OK = 0.75
 CONFIDENCE_WARN = 0.45
 APP_VERSION = "v1.1.0"
+APP_NAME = "DelayScope"
 
 # Log / 输出限制，避免文本过大导致拖动/缩放卡顿
 MAX_LOG_ENTRIES = 50
@@ -121,7 +122,7 @@ def _app_runtime_dir():
     运行时工作目录（放在用户临时/本地目录），避免在 exe 同级生成任何杂项目录（如 log/）。
     """
     base = os.environ.get("LOCALAPPDATA") or os.environ.get("TEMP") or tempfile.gettempdir()
-    p = os.path.join(base, "DelayCalcTool")
+    p = os.path.join(base, APP_NAME)
     try:
         os.makedirs(p, exist_ok=True)
     except Exception:
@@ -433,7 +434,7 @@ class DelayCalcApp:
         ctk.set_default_color_theme("blue")
 
         self.root = ctk.CTk()
-        self.root.title(f"Delay 计算 {APP_VERSION}")
+        self.root.title(f"{APP_NAME} {APP_VERSION}")
         # 定时兜底清理：有组件若异步创建空 log/，在下一次轮询中移除
         self.root.after(1000, self._periodic_cleanup_log_dir)
         # 初始窗口大小与最小宽度
@@ -707,7 +708,7 @@ class DelayCalcApp:
         left_f.pack(side="left")
         title_row = ctk.CTkFrame(left_f, fg_color="transparent")
         title_row.pack(anchor="w")
-        ctk.CTkLabel(title_row, text="Delay 计算", font=ctk.CTkFont(size=22, weight="bold"), text_color=TEXT).pack(side="left")
+        ctk.CTkLabel(title_row, text=APP_NAME, font=ctk.CTkFont(size=22, weight="bold"), text_color=TEXT).pack(side="left")
         ctk.CTkLabel(left_f, text="GCC-PHAT 多段统计, 以选定通道为参考", font=ctk.CTkFont(size=12), text_color=TEXT_SEC).pack(anchor="w")
         right_f = ctk.CTkFrame(title_f, fg_color="transparent")
         right_f.pack(side="right")
@@ -1521,7 +1522,7 @@ class DelayCalcApp:
             return
 
         win = ctk.CTkToplevel(self.root)
-        win.title("Delay Charts")
+        win.title(f"{APP_NAME} Charts")
         win.geometry("1180x900")
         win.minsize(980, 760)
         win.transient(self.root)
@@ -1653,7 +1654,7 @@ class DelayCalcApp:
     def _show_readme_window(self):
         """显示一份适合人类阅读的计算说明（不依赖 Markdown 渲染）。"""
         content = (
-            "【DelayCalcTool 计算说明】\n"
+            f"【{APP_NAME} 计算说明】\n"
             "\n"
             "1. 基本概念\n"
             "   - 工具计算的是各通道相对“参考通道”的时间差。\n"

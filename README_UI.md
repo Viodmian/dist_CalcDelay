@@ -1,4 +1,4 @@
-# Delay 计算 UI 工具
+# DelayScope UI 工具
 
 本工具用于分析多通道 WAV / PCM 音频中，各通道相对参考通道的时间差、漂移趋势、可靠性以及输入质量。
 
@@ -7,7 +7,7 @@
 ### 直接运行
 
 ```powershell
-cd E:\downloads\dist_CalcDelay
+cd C:\path\to\DelayScope
 pip install -r requirements_ui.txt
 python delay_calc_ui.py
 ```
@@ -15,13 +15,13 @@ python delay_calc_ui.py
 ### 打包运行
 
 ```powershell
-cd E:\downloads\dist_CalcDelay
+cd C:\path\to\DelayScope
 .\build_ui.bat
 ```
 
 可执行文件位置：
 
-- `dist\DelayCalcTool.exe`
+- `dist\DelayScope.exe`
 
 ## 2. 界面输入项说明
 
@@ -164,7 +164,7 @@ cd E:\downloads\dist_CalcDelay
 
 完整公式和更详细原理见：
 
-- [README.md](e:/downloads/dist_CalcDelay/README.md)
+- [README.md](README.md)
 
 ## 5. 图表交互
 

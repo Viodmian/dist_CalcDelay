@@ -1,14 +1,14 @@
-## DelayCalcTool 计算说明
+## DelayScope 计算说明
 
-DelayCalcTool 用于分析多通道音频中各通道相对参考通道的到达时延，并给出稳定性、可靠性与音频质量相关辅助指标。
+DelayScope 用于分析多通道音频中各通道相对参考通道的到达时延，并给出稳定性、可靠性与音频质量相关辅助指标。
 
 ## 界面预览
 
 下面截图使用一段合成 6 通道 WAV 演示固定通道延迟、分段统计、置信度和 Delay Drift 图表效果。
 
-![DelayCalcTool 主界面：输入参数、参考通道选择、delay 结果与图表入口](docs/images/delaycalc-main.png)
+![DelayScope 主界面：输入参数、参考通道选择、delay 结果与图表入口](docs/images/delaycalc-main.png)
 
-![DelayCalcTool 图表窗口：多通道 Delay Drift 与置信度曲线](docs/images/delaycalc-chart.png)
+![DelayScope 图表窗口：多通道 Delay Drift 与置信度曲线](docs/images/delaycalc-chart.png)
 
 ---
 
@@ -489,7 +489,7 @@ $$
 
 ## 12. 代码对应关系
 
-- [delay_core.py](e:/downloads/dist_CalcDelay/delay_core.py)
+- [delay_core.py](delay_core.py)
   - `load_wav(...)` / `load_pcm(...)`：读取输入音频
   - `analyze_bandwidth(...)`：宽带 / 窄带判定
   - `analyze_clipping(...)`：数字截幅 / 填充检测
@@ -497,7 +497,7 @@ $$
   - `_normalized_corr_confidence(...)`：基于对齐后的归一化相关系数计算 `|rho|`
   - `compute_delays(...)`：多段 delay 统计、分段轨迹、置信度摘要
 
-- [delay_calc_ui.py](e:/downloads/dist_CalcDelay/delay_calc_ui.py)
+- [delay_calc_ui.py](delay_calc_ui.py)
   - `run_calculation(...)`：组织所有计算结果并生成人类可读文本
   - 图表窗口：展示 `Delay Drift` 与 `Confidence` 两个页面
 
