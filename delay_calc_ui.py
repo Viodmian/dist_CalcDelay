@@ -19,6 +19,12 @@ except ImportError:
     HAS_CTK = False
 
 try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
+
+try:
     import matplotlib as mpl
     from matplotlib import font_manager
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
@@ -56,6 +62,8 @@ APP_NAME = "DelayScope"
 MAX_LOG_ENTRIES = 50
 MAX_RENDER_LINES = 2500
 BUNDLED_FONT_RELATIVE_PATH = os.path.join("fonts", "simhei.ttf")
+LOGO_PNG_RELATIVE_PATH = os.path.join("assets", "branding", "delayscope-logo-ui.png")
+LOGO_ICO_RELATIVE_PATH = os.path.join("assets", "branding", "delayscope-logo.ico")
 
 
 def _bundled_resource_path(relative_path: str):
@@ -435,6 +443,7 @@ class DelayCalcApp:
 
         self.root = ctk.CTk()
         self.root.title(f"{APP_NAME} {APP_VERSION}")
+        self._apply_window_icon(self.root)
         # 定时兜底清理：有组件若异步创建空 log/，在下一次轮询中移除
         self.root.after(1000, self._periodic_cleanup_log_dir)
         # 初始窗口大小与最小宽度
@@ -514,12 +523,48 @@ class DelayCalcApp:
         self.popup_conf_toolbar = None
         self.popup_plot_interactions = {}
         self.popup_status_var = None
+        self.logo_image = None
+        self._window_icon_image = None
         self._canvas_draw_after_ids = {}
         self._build_ui()
 
     def _get_tk_text(self, ctk_textbox):
         # customtkinter.CTkTextbox 内部封装了 tkinter.Text
         return getattr(ctk_textbox, "_textbox", ctk_textbox)
+
+    def _load_logo_image(self):
+        path = _bundled_resource_path(LOGO_PNG_RELATIVE_PATH)
+        if not os.path.isfile(path):
+            return None
+        try:
+            if HAS_PIL and HAS_CTK:
+                img = Image.open(path)
+                return ctk.CTkImage(light_image=img, dark_image=img, size=(40, 40))
+            return tk.PhotoImage(file=path)
+        except Exception:
+            return None
+
+    def _apply_window_icon(self, window):
+        ico_path = _bundled_resource_path(LOGO_ICO_RELATIVE_PATH)
+        if os.path.isfile(ico_path):
+            try:
+                window.iconbitmap(ico_path)
+                return
+            except Exception:
+                pass
+
+        png_path = _bundled_resource_path(LOGO_PNG_RELATIVE_PATH)
+        if not os.path.isfile(png_path):
+            return
+        try:
+            icon_image = tk.PhotoImage(file=png_path)
+            window.iconphoto(True, icon_image)
+            if window is self.root:
+                self._window_icon_image = icon_image
+            else:
+                window._window_icon_image = icon_image
+        except Exception:
+            pass
 
     def _set_text_state(self, ctk_textbox, state: str):
         """确保对内部 tk.Text 设置 state，避免 CTk 封装差异导致 tag 无效。"""
@@ -726,6 +771,9 @@ class DelayCalcApp:
         left_f.pack(side="left")
         title_row = ctk.CTkFrame(left_f, fg_color="transparent")
         title_row.pack(anchor="w")
+        self.logo_image = self._load_logo_image()
+        if self.logo_image is not None:
+            ctk.CTkLabel(title_row, image=self.logo_image, text="", width=40, height=40).pack(side="left", padx=(0, 10))
         ctk.CTkLabel(title_row, text=APP_NAME, font=ctk.CTkFont(size=22, weight="bold"), text_color=TEXT).pack(side="left")
         ctk.CTkLabel(left_f, text="GCC-PHAT 多段统计, 以选定通道为参考", font=ctk.CTkFont(size=12), text_color=TEXT_SEC).pack(anchor="w")
         right_f = ctk.CTkFrame(title_f, fg_color="transparent")
@@ -1595,6 +1643,7 @@ class DelayCalcApp:
 
         win = ctk.CTkToplevel(self.root)
         win.title(f"{APP_NAME} Charts")
+        self._apply_window_icon(win)
         win.geometry("1180x900")
         win.minsize(980, 760)
         win.transient(self.root)
@@ -1770,6 +1819,7 @@ class DelayCalcApp:
 
         win = ctk.CTkToplevel(self.root)
         win.title("README")
+        self._apply_window_icon(win)
         win.geometry("720x640")
         win.minsize(520, 480)
         win.transient(self.root)

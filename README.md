@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/branding/delayscope-logo.svg" width="112" alt="DelayScope logo">
+</p>
+
 ## DelayScope 计算说明
 
 DelayScope 用于分析多通道音频中各通道相对参考通道的到达时延，并给出稳定性、可靠性与音频质量相关辅助指标。

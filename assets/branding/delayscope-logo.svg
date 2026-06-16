@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">DelayScope logo</title>
+  <desc id="desc">A rounded blue scope mark with delay cursors and aligned waveforms.</desc>
+  <defs>
+    <linearGradient id="bg" x1="128" y1="96" x2="896" y2="928" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0A84FF"/>
+      <stop offset="0.55" stop-color="#0066D6"/>
+      <stop offset="1" stop-color="#183B9B"/>
+    </linearGradient>
+    <linearGradient id="scope" x1="250" y1="214" x2="814" y2="808" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#B9E7FF"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="248" y1="356" x2="776" y2="668" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5AE6FF"/>
+      <stop offset="1" stop-color="#7CFFB2"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="34" stdDeviation="34" flood-color="#04245A" flood-opacity="0.30"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <g filter="url(#shadow)">
+    <circle cx="512" cy="512" r="306" fill="#EAF7FF" fill-opacity="0.12"/>
+    <circle cx="512" cy="512" r="266" fill="#071A43" fill-opacity="0.28" stroke="url(#scope)" stroke-width="42"/>
+    <circle cx="512" cy="512" r="188" fill="#081E4A" fill-opacity="0.34" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="18"/>
+  </g>
+
+  <path d="M254 520H338C360 520 369 475 390 475C414 475 424 594 448 594C474 594 482 420 512 420C542 420 550 594 576 594C600 594 610 475 634 475C655 475 664 520 686 520H770" fill="none" stroke="url(#accent)" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M254 606H338C360 606 369 561 390 561C414 561 424 680 448 680C474 680 482 506 512 506C542 506 550 680 576 680C600 680 610 561 634 561C655 561 664 606 686 606H770" fill="none" stroke="#FFFFFF" stroke-opacity="0.86" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <path d="M362 314V742" stroke="#FFFFFF" stroke-opacity="0.74" stroke-width="20" stroke-linecap="round"/>
+  <path d="M662 314V742" stroke="#FFFFFF" stroke-opacity="0.74" stroke-width="20" stroke-linecap="round"/>
+  <path d="M362 314L326 350M362 314L398 350M362 742L326 706M362 742L398 706" stroke="#FFFFFF" stroke-opacity="0.74" stroke-width="20" stroke-linecap="round"/>
+  <path d="M662 314L626 350M662 314L698 350M662 742L626 706M662 742L698 706" stroke="#FFFFFF" stroke-opacity="0.74" stroke-width="20" stroke-linecap="round"/>
+
+  <circle cx="362" cy="520" r="30" fill="#7CFFB2" stroke="#031B43" stroke-width="12"/>
+  <circle cx="662" cy="606" r="30" fill="#5AE6FF" stroke="#031B43" stroke-width="12"/>
+</svg>
