@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog, messagebox
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 try:
@@ -27,6 +28,7 @@ except ImportError:
 try:
     import matplotlib as mpl
     from matplotlib import font_manager
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
     from matplotlib.figure import Figure
     from matplotlib.patches import Rectangle
@@ -63,6 +65,7 @@ MAX_LOG_ENTRIES = 50
 MAX_RENDER_LINES = 2500
 BUNDLED_FONT_RELATIVE_PATH = os.path.join("fonts", "simhei.ttf")
 LOGO_PNG_RELATIVE_PATH = os.path.join("assets", "branding", "delayscope-logo-ui.png")
+LOGO_REPORT_RELATIVE_PATH = os.path.join("assets", "branding", "delayscope-logo-256.png")
 LOGO_ICO_RELATIVE_PATH = os.path.join("assets", "branding", "delayscope-logo.ico")
 
 
@@ -328,6 +331,23 @@ def run_calculation(path, is_wav, pcm_sr, pcm_bits, pcm_ch, ref_ch, segment_s, s
                 pcm_channels=pcm_ch,
             )
 
+        details.update(
+            {
+                "source_path": path,
+                "source_format": "WAV" if is_wav else "PCM",
+                "sample_rate": int(sr),
+                "channels": int(n_ch),
+                "duration_s": float(duration_s),
+                "segment_s": float(segment_s),
+                "step_s": float(step_s),
+                "start_s": float(start_s),
+                "ref_ch": int(ref_ch),
+                "delays": [float(x) for x in delays],
+                "bandwidth": dict(bw),
+                "clip_stats": clip_stats,
+            }
+        )
+
         lines = [
             f"文件: {path}",
             f"采样率: {sr} Hz  通道数: {n_ch}  时长: {duration_s:.2f} s",
@@ -503,6 +523,8 @@ class DelayCalcApp:
         self.plot_view_buttons = []
         self.popup_plot_channel_buttons = []
         self.latest_plot_data = None
+        self.latest_result_context = None
+        self.btn_export_report = None
         self.delay_fig = None
         self.delay_ax = None
         self.delay_canvas = None
@@ -919,6 +941,21 @@ class DelayCalcApp:
             font=ctk.CTkFont(size=15, weight="bold"),
         )
         self.run_btn.pack(fill="x")
+        self.btn_export_report = ctk.CTkButton(
+            btn_f,
+            text="导出报告图",
+            command=self._export_report_image,
+            height=38,
+            fg_color=INPUT_BG,
+            hover_color="#e8e8ec",
+            border_width=1,
+            border_color="#d1d1d6",
+            text_color=TEXT,
+            corner_radius=BTN_RADIUS,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            state="disabled",
+        )
+        self.btn_export_report.pack(fill="x", pady=(8, 0))
 
         # ——— 卡片 3：结果（圆角，自适应窗口高度） ———
         card3 = ctk.CTkFrame(main, fg_color=CARD_BG, corner_radius=CORNER_RADIUS, border_width=0)
@@ -1997,6 +2034,9 @@ class DelayCalcApp:
         self.result_text.delete("1.0", "end")
         self.result_text.insert("end", "正在计算，请稍候…\n")
         self._clear_plot_data()
+        self.latest_result_context = None
+        if self.btn_export_report is not None:
+            self.btn_export_report.configure(state="disabled")
 
         def done(ok, msg, delays_list, n_segs, details):
             self.root.after(0, lambda: self._done(ok, msg, delays_list, n_segs, details))
@@ -2026,10 +2066,24 @@ class DelayCalcApp:
         # 恢复按钮文本与状态
         self.run_btn.configure(state="normal", text="计算 Delay")
         self.result_text.delete("1.0", "end")
+        details = details or {}
         if ok:
             # 写入当前结果（带颜色）
             self._render_colored_output(self.result_text, msg, add_end_marker=True)
-            self._set_plot_data(details or {}, self._ref_ch_to_index())
+            ref_ch = int(details.get("ref_ch", self._ref_ch_to_index()))
+            delay_source = delays_list if delays_list is not None else details.get("delays", [])
+            delays_clean = [float(x) for x in delay_source]
+            self.latest_result_context = {
+                "message": msg,
+                "delays": delays_clean,
+                "n_segs": int(n_segs),
+                "details": details,
+                "path": details.get("source_path", self.file_path.get().strip()),
+                "ref_ch": ref_ch,
+            }
+            if self.btn_export_report is not None:
+                self.btn_export_report.configure(state="normal")
+            self._set_plot_data(details, ref_ch)
             self._open_chart_window()
 
             log_entry = "✅ 计算成功\n" + msg.strip("\n") + "\n"
@@ -2044,8 +2098,277 @@ class DelayCalcApp:
                 self._render_log_panel_from_history()
         else:
             self._clear_plot_data()
+            self.latest_result_context = None
+            if self.btn_export_report is not None:
+                self.btn_export_report.configure(state="disabled")
             self.result_text.insert("end", f"计算出错:\n{msg}")
             messagebox.showerror("错误", msg)
+
+    def _export_report_image(self):
+        if not HAS_MPL:
+            messagebox.showwarning("提示", "当前环境缺少 matplotlib，无法导出报告图。")
+            return
+        if not self.latest_result_context:
+            messagebox.showwarning("提示", "请先完成一次成功计算，再导出报告图。")
+            return
+
+        source_path = self.latest_result_context.get("path") or "DelayScope"
+        base_name = os.path.splitext(os.path.basename(source_path))[0] or "DelayScope"
+        safe_name = "".join("_" if ch in '<>:"/\\|?*' else ch for ch in base_name).strip() or "DelayScope"
+        out_path = filedialog.asksaveasfilename(
+            title="导出报告图",
+            defaultextension=".png",
+            initialfile=f"{safe_name}_DelayScope_report.png",
+            filetypes=[("PNG 图片", "*.png"), ("所有文件", "*.*")],
+        )
+        if not out_path:
+            return
+
+        try:
+            self._save_report_image(out_path)
+        except Exception as exc:
+            messagebox.showerror("导出失败", str(exc))
+            return
+
+        messagebox.showinfo("导出完成", f"报告图已保存到:\n{out_path}")
+
+    def _save_report_image(self, out_path):
+        if not HAS_MPL:
+            raise RuntimeError("matplotlib is not available")
+        if not self.latest_result_context:
+            raise RuntimeError("No calculation result is available")
+
+        context = self.latest_result_context
+        details = context.get("details") or {}
+        plot_data = self.latest_plot_data or {
+            "times_s": list(details.get("times_s", [])),
+            "per_channel_delays": [list(x) for x in details.get("per_channel_delays", [])],
+            "per_channel_confidences": [list(x) for x in details.get("per_channel_confidences", [])],
+            "ref_ch": int(details.get("ref_ch", context.get("ref_ch", 0))),
+        }
+
+        delay_source = context.get("delays")
+        if delay_source is None:
+            delay_source = details.get("delays", [])
+        delays = list(delay_source)
+        per_delays = [list(x) for x in plot_data.get("per_channel_delays", [])]
+        per_conf = [list(x) for x in plot_data.get("per_channel_confidences", [])]
+        n_ch = int(details.get("channels") or len(delays) or len(per_delays) or len(per_conf) or 0)
+        sr = int(details.get("sample_rate") or 1)
+        ref_ch = int(details.get("ref_ch", context.get("ref_ch", plot_data.get("ref_ch", 0))))
+        n_segs = int(context.get("n_segs", 0))
+        source_path = context.get("path") or details.get("source_path") or ""
+        source_name = os.path.basename(source_path) if source_path else "未命名音频"
+        duration_s = float(details.get("duration_s") or 0.0)
+        segment_s = details.get("segment_s", "")
+        step_s = details.get("step_s", "")
+        start_s = details.get("start_s", "")
+        confidence_threshold = float(details.get("confidence_threshold") or 0.0)
+        min_confident_segments = int(details.get("min_confident_segments") or 0)
+        summary_conf = list(details.get("summary_confidences", []))
+        confident_counts = list(details.get("confident_segment_counts", []))
+        used_filter = list(details.get("used_confidence_filter", []))
+        raw_delays = list(details.get("raw_delays", delays))
+        bandwidth = details.get("bandwidth") or {}
+        format_name = details.get("source_format") or ("WAV" if self.is_wav.get() else "PCM")
+
+        def seq_get(seq, idx, default=0):
+            try:
+                return seq[idx]
+            except Exception:
+                return default
+
+        def fmt_num(value, digits=2, signed=False):
+            try:
+                value = float(value)
+                prefix = "+" if signed else ""
+                return f"{value:{prefix}.{digits}f}"
+            except Exception:
+                return "-"
+
+        out_dir = os.path.dirname(os.path.abspath(out_path))
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+
+        fig = Figure(figsize=(14, 8.75), dpi=160, facecolor="#f4f7fb")
+        FigureCanvasAgg(fig)
+
+        def add_panel(x, y, w, h):
+            fig.patches.append(
+                Rectangle(
+                    (x, y),
+                    w,
+                    h,
+                    transform=fig.transFigure,
+                    facecolor="#ffffff",
+                    edgecolor="#dbe3ef",
+                    linewidth=1.0,
+                    zorder=-10,
+                )
+            )
+
+        add_panel(0.035, 0.825, 0.93, 0.13)
+        add_panel(0.035, 0.105, 0.445, 0.695)
+        add_panel(0.505, 0.44, 0.46, 0.36)
+        add_panel(0.505, 0.105, 0.46, 0.305)
+
+        logo_path = _bundled_resource_path(LOGO_REPORT_RELATIVE_PATH)
+        if not os.path.isfile(logo_path):
+            logo_path = _bundled_resource_path(LOGO_PNG_RELATIVE_PATH)
+        if HAS_PIL and os.path.isfile(logo_path):
+            try:
+                logo_ax = fig.add_axes([0.055, 0.855, 0.07, 0.075])
+                logo_ax.imshow(Image.open(logo_path))
+                logo_ax.axis("off")
+            except Exception:
+                pass
+
+        fig.text(0.14, 0.91, "DelayScope Report", fontsize=24, weight="bold", color=TEXT, ha="left", va="center")
+        fig.text(0.14, 0.875, "音频通道延迟分析报告", fontsize=12, color=TEXT_SEC, ha="left", va="center")
+        fig.text(0.94, 0.91, datetime.now().strftime("%Y-%m-%d %H:%M"), fontsize=10, color=TEXT_SEC, ha="right", va="center")
+
+        meta_ax = fig.add_axes([0.14, 0.83, 0.805, 0.04])
+        meta_ax.axis("off")
+        bw_label = bandwidth.get("label", "-")
+        bw_desc = "宽带(WB)" if bw_label == "WB" else ("窄带(NB)" if bw_label == "NB" else "-")
+        meta_text = (
+            f"文件: {source_name}    格式: {format_name}    采样率: {sr} Hz    "
+            f"通道: {n_ch}    时长: {duration_s:.2f}s    带宽: {bw_desc}\n"
+            f"参考通道: ch{ref_ch}    分段: {segment_s}s / 步长 {step_s}s / 起始 {start_s}s    "
+            f"有效段数: {n_segs}    置信阈值: |rho| >= {confidence_threshold:.2f}, min={min_confident_segments}"
+        )
+        meta_ax.text(0.0, 0.95, meta_text, fontsize=9.2, color=TEXT_SEC, ha="left", va="top", linespacing=1.5)
+
+        table_ax = fig.add_axes([0.055, 0.13, 0.405, 0.635])
+        table_ax.axis("off")
+        table_ax.text(0.0, 1.02, "通道结果", fontsize=14, weight="bold", color=TEXT, ha="left", va="bottom")
+
+        rows = []
+        row_verdicts = []
+        for ch in range(n_ch):
+            delay_value = float(seq_get(delays, ch, 0.0))
+            conf_value = float(seq_get(summary_conf, ch, 1.0 if ch == ref_ch else 0.0))
+            count_value = int(seq_get(confident_counts, ch, n_segs if ch == ref_ch else 0))
+            used_value = bool(seq_get(used_filter, ch, True if ch == ref_ch else False))
+            raw_value = float(seq_get(raw_delays, ch, delay_value))
+            verdict, _reason = classify_delay_reliability(ch, ref_ch, conf_value, count_value, n_segs, used_value)
+            if ch == ref_ch:
+                recommendation = "参考"
+            elif verdict == "可信":
+                recommendation = "推荐"
+            elif verdict == "存疑":
+                recommendation = "复核"
+            else:
+                recommendation = "慎用"
+            rows.append(
+                [
+                    f"ch{ch}",
+                    fmt_num(delay_value, 1, signed=True),
+                    fmt_num(delay_value / sr * 1000.0, 2, signed=True),
+                    fmt_num(conf_value, 3),
+                    f"{count_value}/{n_segs}",
+                    recommendation,
+                ]
+            )
+            row_verdicts.append(verdict)
+
+        if rows:
+            row_font = max(6.4, min(8.8, 10.2 - max(0, len(rows) - 8) * 0.16))
+            table = table_ax.table(
+                cellText=rows,
+                colLabels=["Ch", "Samples", "ms", "|rho|", "Segs", "建议"],
+                cellLoc="center",
+                colLoc="center",
+                loc="upper left",
+                colWidths=[0.11, 0.20, 0.18, 0.16, 0.17, 0.18],
+                bbox=[0.0, 0.0, 1.0, 0.965],
+            )
+            table.auto_set_font_size(False)
+            table.set_fontsize(row_font)
+            for (row, col), cell in table.get_celld().items():
+                cell.set_edgecolor("#e5e7eb")
+                cell.set_linewidth(0.7)
+                if row == 0:
+                    cell.set_facecolor("#eef4ff")
+                    cell.set_text_props(color=TEXT, weight="bold")
+                    continue
+                verdict = row_verdicts[row - 1]
+                if verdict == "可信":
+                    bg = "#f0fbf4"
+                elif verdict == "存疑":
+                    bg = "#fff8ea"
+                else:
+                    bg = "#fff1f0"
+                if row - 1 == ref_ch:
+                    bg = "#eef4ff"
+                cell.set_facecolor(bg if col == 5 else "#ffffff")
+                cell.set_text_props(color=TEXT if col != 5 else "#1f2937")
+        else:
+            table_ax.text(0.5, 0.5, "没有可导出的通道结果", fontsize=11, color=TEXT_SEC, ha="center", va="center")
+
+        def style_report_axis(ax, title, ylabel, ylim=None):
+            ax.set_title(title, fontsize=12, color=TEXT, pad=8)
+            ax.set_xlabel("Time (s)", fontsize=9, color=TEXT_SEC)
+            ax.set_ylabel(ylabel, fontsize=9, color=TEXT_SEC)
+            ax.set_facecolor("#ffffff")
+            ax.grid(True, color="#e5e7eb", linewidth=0.8, alpha=0.9)
+            ax.tick_params(axis="both", colors=TEXT_SEC, labelsize=8)
+            for spine in ax.spines.values():
+                spine.set_color("#d1d5db")
+            if ylim is not None:
+                ax.set_ylim(*ylim)
+
+        times_s = list(plot_data.get("times_s", []))
+        plot_channels = list(range(max(len(per_delays), len(per_conf))))
+
+        delay_ax = fig.add_axes([0.535, 0.485, 0.395, 0.265])
+        style_report_axis(delay_ax, "Delay Drift", "delay_samples")
+        delay_has_data = bool(times_s and per_delays)
+        if delay_has_data:
+            for ch in plot_channels:
+                y = list(seq_get(per_delays, ch, []))
+                if not y:
+                    continue
+                x = times_s[: len(y)] if times_s else list(range(len(y)))
+                color = self._channel_plot_color(ch)
+                delay_ax.plot(x, y, marker="o", markersize=2.5, linewidth=1.15, color=color, label=f"ch{ch}")
+                if y:
+                    median = sorted(y)[len(y) // 2]
+                    delay_ax.axhline(median, color=color, linestyle="--", linewidth=0.75, alpha=0.25)
+            if plot_channels:
+                delay_ax.legend(loc="best", fontsize=7, frameon=False, ncol=2 if len(plot_channels) > 5 else 1)
+        else:
+            delay_ax.text(0.5, 0.5, "暂无分段漂移数据", fontsize=10, color=TEXT_SEC, ha="center", va="center", transform=delay_ax.transAxes)
+
+        conf_ax = fig.add_axes([0.535, 0.15, 0.395, 0.215])
+        style_report_axis(conf_ax, "Confidence", "|rho|", ylim=(0.0, 1.05))
+        conf_ax.axhline(CONFIDENCE_OK, color="#34C759", linestyle="--", linewidth=1.0, alpha=0.75)
+        conf_ax.axhline(CONFIDENCE_WARN, color="#FF9500", linestyle="--", linewidth=1.0, alpha=0.75)
+        conf_has_data = bool(times_s and per_conf)
+        if conf_has_data:
+            for ch in plot_channels:
+                y = list(seq_get(per_conf, ch, []))
+                if not y:
+                    continue
+                x = times_s[: len(y)] if times_s else list(range(len(y)))
+                conf_ax.plot(x, y, marker="o", markersize=2.5, linewidth=1.15, color=self._channel_plot_color(ch), label=f"ch{ch}")
+            if plot_channels:
+                conf_ax.legend(loc="lower right", fontsize=7, frameon=False, ncol=2 if len(plot_channels) > 5 else 1)
+        else:
+            conf_ax.text(0.5, 0.5, "暂无置信度曲线数据", fontsize=10, color=TEXT_SEC, ha="center", va="center", transform=conf_ax.transAxes)
+
+        fig.text(
+            0.055,
+            0.065,
+            "说明: delay_samples 为各通道相对参考通道的延迟；正数表示该通道滞后于参考。建议结合 |rho| 和达标分段数判断结果是否可直接采用。",
+            fontsize=9,
+            color=TEXT_SEC,
+            ha="left",
+            va="center",
+        )
+        fig.text(0.94, 0.065, f"Generated by {APP_NAME} {APP_VERSION}", fontsize=9, color=TEXT_SEC, ha="right", va="center")
+
+        fig.savefig(out_path, dpi=160, facecolor=fig.get_facecolor())
 
     def _render_log_panel_from_history(self):
         if self.log_textbox is None:

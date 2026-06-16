@@ -10,10 +10,11 @@ a = Analysis(
     datas=[
         ('README.md', '.'),
         ('assets\\branding\\delayscope-logo-ui.png', 'assets\\branding'),
+        ('assets\\branding\\delayscope-logo-256.png', 'assets\\branding'),
         ('assets\\branding\\delayscope-logo.ico', 'assets\\branding'),
         ('C:\\Windows\\Fonts\\simhei.ttf', 'fonts'),
     ],
-    hiddenimports=['numpy', 'delay_core', 'customtkinter', 'matplotlib', 'matplotlib.backends.backend_tkagg'],
+    hiddenimports=['numpy', 'delay_core', 'customtkinter', 'matplotlib', 'matplotlib.backends.backend_tkagg', 'matplotlib.backends.backend_agg'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
