@@ -193,13 +193,11 @@ def gcc_phat_delay(sig_a, sig_b, max_tau_samples=None, interp=1):
     max_tau_samples = min(max_tau_samples, n // 2 - 1)
 
     n_fft = n * 2 * interp
-    a = np.zeros(n_fft)
-    b = np.zeros(n_fft)
-    a[:n] = sig_a
-    b[:n] = sig_b
+    a = np.asarray(sig_a, dtype=np.float64)
+    b = np.asarray(sig_b, dtype=np.float64)
 
-    fa = np.fft.rfft(a)
-    fb = np.fft.rfft(b)
+    fa = np.fft.rfft(a, n=n_fft)
+    fb = np.fft.rfft(b, n=n_fft)
     R = fa * np.conj(fb)
     denom = np.abs(R)
     denom[denom < 1e-12] = 1e-12
@@ -269,10 +267,9 @@ def _segment_delays_fft_reuse(seg, ref_ch, max_tau_samples, interp=1):
         return [0.0] * n_ch, [0.0] * n_ch
 
     n_fft = n * 2 * interp
-    a = np.zeros((n_fft, n_ch), dtype=np.float64)
-    a[:n, :] = seg
+    seg = np.asarray(seg, dtype=np.float64)
 
-    F = np.fft.rfft(a, axis=0)
+    F = np.fft.rfft(seg, n=n_fft, axis=0)
     Fref = F[:, ref_ch]
     R = Fref[:, None] * np.conj(F)
     denom = np.abs(R)
@@ -329,24 +326,55 @@ def compute_delays(
     返回: (delays_list, n_segs) 或 (delays_list, n_segs, details)
     - delays_list[i] = 通道 i 相对 ref 的 delay（ref 自身为 0）
     """
+    data = np.asarray(data, dtype=np.float64)
+    if data.ndim != 2:
+        raise ValueError("data must be a 2D array shaped as (n_frames, n_channels)")
+
     n_frames, n_ch = data.shape
+    if n_ch <= 0:
+        raise ValueError("data must contain at least one channel")
+
+    sr = float(sr)
+    if not np.isfinite(sr) or sr <= 0:
+        raise ValueError("sr must be a positive sample rate")
+
+    ref_ch = int(ref_ch)
+    if ref_ch < 0 or ref_ch >= n_ch:
+        raise ValueError(f"ref_ch {ref_ch} is out of range for {n_ch} channels")
+
+    segment_s = float(segment_s)
+    step_s = float(step_s)
+    start_s = float(start_s)
+    max_tau_s = float(max_tau_s)
+    confidence_threshold = float(confidence_threshold)
+    if not np.isfinite(segment_s) or segment_s <= 0:
+        raise ValueError("segment_s must be positive")
+    if not np.isfinite(step_s) or step_s <= 0:
+        raise ValueError("step_s must be positive")
+    if not np.isfinite(start_s) or start_s < 0:
+        raise ValueError("start_s must be zero or positive")
+    if not np.isfinite(max_tau_s) or max_tau_s <= 0:
+        raise ValueError("max_tau_s must be positive")
+    if not np.isfinite(confidence_threshold):
+        raise ValueError("confidence_threshold must be finite")
+
     seg_len = int(segment_s * sr)
     step_len = int(step_s * sr)
     start_frame = int(start_s * sr)
     max_tau_samples = int(max_tau_s * sr)
-
-    ch_delays = [[] for _ in range(n_ch)]
+    if seg_len <= 0:
+        raise ValueError("segment_s is too small for this sample rate")
+    if step_len <= 0:
+        raise ValueError("step_s is too small for this sample rate")
+    if max_tau_samples <= 0:
+        raise ValueError("max_tau_s is too small for this sample rate")
 
     segments = []
-    seg_idx = 0
-    while True:
-        s = start_frame + seg_idx * step_len
+    last_start = n_frames - seg_len
+    for seg_idx, s in enumerate(range(start_frame, last_start + 1, step_len)):
         e = s + seg_len
-        if e > n_frames:
-            break
         center_s = ((s + e) * 0.5) / float(sr)
         segments.append((seg_idx, s, e, center_s))
-        seg_idx += 1
 
     n_segs = len(segments)
     min_confident_segments = min(n_segs, max(3, int(np.ceil(n_segs * 0.2)))) if n_segs > 0 else 0
@@ -392,7 +420,6 @@ def compute_delays(
         per_seg_times[idx] = float(center_s)
         for ch in range(n_ch):
             value = float(dlist[ch])
-            ch_delays[ch].append(value)
             per_seg_delays[ch][idx] = value
             per_seg_confidences[ch][idx] = float(clist[ch])
 
@@ -409,7 +436,7 @@ def compute_delays(
         for seg_info in segments:
             store_result(compute_one(seg_info))
 
-    raw_delays = [float(np.median(ch_delays[ch])) for ch in range(n_ch)]
+    raw_delays = [float(np.median(per_seg_delays[ch])) for ch in range(n_ch)]
     delays = [0.0 for _ in range(n_ch)]
     confident_segment_counts = [0 for _ in range(n_ch)]
     used_confidence_filter = [False for _ in range(n_ch)]
