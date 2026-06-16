@@ -2,6 +2,16 @@
 
 DelayCalcTool 用于分析多通道音频中各通道相对参考通道的到达时延，并给出稳定性、可靠性与音频质量相关辅助指标。
 
+## 界面预览
+
+下面截图使用一段合成 6 通道 WAV 演示固定通道延迟、分段统计、置信度和 Delay Drift 图表效果。
+
+![DelayCalcTool 主界面：输入参数、参考通道选择、delay 结果与图表入口](docs/images/delaycalc-main.png)
+
+![DelayCalcTool 图表窗口：多通道 Delay Drift 与置信度曲线](docs/images/delaycalc-chart.png)
+
+---
+
 当前工具会输出和展示以下几类数据：
 
 - `delay_samples`：各通道相对参考通道的时延，单位为采样点
