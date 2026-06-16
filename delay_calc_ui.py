@@ -500,7 +500,10 @@ class DelayCalcApp:
         self.conf_fig = None
         self.conf_ax = None
         self.conf_canvas = None
+        self.plot_stack = None
+        self.plot_light_placeholder = None
         self.chart_window = None
+        self.popup_notebook = None
         self.popup_delay_fig = None
         self.popup_delay_ax = None
         self.popup_delay_canvas = None
@@ -511,6 +514,7 @@ class DelayCalcApp:
         self.popup_conf_toolbar = None
         self.popup_plot_interactions = {}
         self.popup_status_var = None
+        self._canvas_draw_after_ids = {}
         self._build_ui()
 
     def _get_tk_text(self, ctk_textbox):
@@ -671,6 +675,20 @@ class DelayCalcApp:
                 else:
                     self.log_placeholder.pack_forget()
                     self.log_textbox.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+            except Exception:
+                pass
+
+        # Matplotlib canvas 在窗口 resize 时开销较大；拖动期间先用占位层替代。
+        if self.plot_stack is not None and self.plot_light_placeholder is not None:
+            try:
+                if enabled:
+                    self.plot_stack.grid_remove()
+                    self.plot_light_placeholder.grid(row=5, column=0, sticky="nsew")
+                else:
+                    self.plot_light_placeholder.grid_remove()
+                    self.plot_stack.grid()
+                    if HAS_MPL:
+                        self.root.after_idle(self._refresh_embedded_plot_view)
             except Exception:
                 pass
 
@@ -914,6 +932,16 @@ class DelayCalcApp:
         self.plot_stack.grid_columnconfigure(0, weight=1)
         self.plot_stack.grid_rowconfigure(0, weight=1)
 
+        self.plot_light_placeholder = ctk.CTkFrame(inner3, fg_color=INPUT_BG, corner_radius=INPUT_RADIUS, height=420)
+        ctk.CTkLabel(
+            self.plot_light_placeholder,
+            text="调整窗口中…",
+            font=ctk.CTkFont(size=12),
+            text_color=TEXT_SEC,
+        ).pack(fill="both", expand=True, padx=12, pady=12)
+        self.plot_light_placeholder.grid(row=5, column=0, sticky="nsew")
+        self.plot_light_placeholder.grid_remove()
+
         self.delay_plot_host = ctk.CTkFrame(self.plot_stack, fg_color=INPUT_BG, corner_radius=INPUT_RADIUS)
         self.delay_plot_host.grid(row=0, column=0, sticky="nsew")
         self.conf_plot_host = ctk.CTkFrame(self.plot_stack, fg_color=INPUT_BG, corner_radius=INPUT_RADIUS)
@@ -1060,6 +1088,7 @@ class DelayCalcApp:
         self.plot_view.set(value)
         self._refresh_plot_view_buttons_style()
         self._show_plot_host(value)
+        self._refresh_embedded_plot_view()
 
     def _init_plot_widgets(self):
         if HAS_MPL:
@@ -1088,6 +1117,32 @@ class DelayCalcApp:
             font=ctk.CTkFont(size=12),
         )
         self.conf_fallback.pack(fill="both", expand=True, padx=12, pady=12)
+
+    def _draw_canvas_throttled(self, canvas, delay_ms=33):
+        if canvas is None:
+            return
+        key = id(canvas)
+        if key in self._canvas_draw_after_ids:
+            return
+
+        try:
+            widget = canvas.get_tk_widget()
+        except Exception:
+            canvas.draw_idle()
+            return
+
+        def draw_later():
+            self._canvas_draw_after_ids.pop(key, None)
+            try:
+                if widget.winfo_exists():
+                    canvas.draw_idle()
+            except Exception:
+                pass
+
+        try:
+            self._canvas_draw_after_ids[key] = widget.after(delay_ms, draw_later)
+        except Exception:
+            canvas.draw_idle()
 
     def _style_plot_axis(self, ax, title, ylabel):
         ax.clear()
@@ -1199,9 +1254,16 @@ class DelayCalcApp:
     def _refresh_plot_views(self):
         if not HAS_MPL:
             return
-        self._render_delay_plot(self.delay_ax, self.delay_canvas)
-        self._render_conf_plot(self.conf_ax, self.conf_canvas)
+        self._refresh_embedded_plot_view()
         self._refresh_popup_plot_views()
+
+    def _refresh_embedded_plot_view(self):
+        if not HAS_MPL or self._in_light_mode:
+            return
+        if self.plot_view.get() == "confidence":
+            self._render_conf_plot(self.conf_ax, self.conf_canvas)
+        else:
+            self._render_delay_plot(self.delay_ax, self.delay_canvas)
 
     def _set_plot_data(self, details, ref_ch):
         self.latest_plot_data = {
@@ -1259,9 +1321,19 @@ class DelayCalcApp:
     def _refresh_popup_plot_views(self):
         if not HAS_MPL or self.chart_window is None or not self.chart_window.winfo_exists():
             return
-        self._render_delay_plot(self.popup_delay_ax, self.popup_delay_canvas)
-        self._render_conf_plot(self.popup_conf_ax, self.popup_conf_canvas)
+        if self._selected_popup_plot_view() == "confidence":
+            self._render_conf_plot(self.popup_conf_ax, self.popup_conf_canvas)
+        else:
+            self._render_delay_plot(self.popup_delay_ax, self.popup_delay_canvas)
         self._reset_popup_interaction_rectangles()
+
+    def _selected_popup_plot_view(self):
+        try:
+            if self.popup_notebook is not None and self.popup_notebook.index("current") == 1:
+                return "confidence"
+        except Exception:
+            pass
+        return "delay"
 
     def _current_plot_bounds(self, kind):
         if not self.latest_plot_data or not self.latest_plot_data.get("times_s"):
@@ -1438,7 +1510,7 @@ class DelayCalcApp:
                 ylim = press["ylim"]
                 ax.set_xlim(xlim[0] + dx, xlim[1] + dx)
                 ax.set_ylim(ylim[0] + dy, ylim[1] + dy)
-                canvas.draw_idle()
+                self._draw_canvas_throttled(canvas)
             elif state.get("mode") == "zoom" and event.xdata is not None and event.ydata is not None:
                 rect = state.get("rect")
                 if rect is None:
@@ -1447,7 +1519,7 @@ class DelayCalcApp:
                 rect.set_y(min(press["y"], float(event.ydata)))
                 rect.set_width(abs(float(event.xdata) - press["x"]))
                 rect.set_height(abs(float(event.ydata) - press["y"]))
-                canvas.draw_idle()
+                self._draw_canvas_throttled(canvas)
 
         def _on_release(event):
             if _toolbar_active():
@@ -1506,7 +1578,7 @@ class DelayCalcApp:
 
             ax.set_xlim(new_x_min, new_x_max)
             ax.set_ylim(new_y_min, new_y_max)
-            canvas.draw_idle()
+            self._draw_canvas_throttled(canvas)
 
         figure.canvas.mpl_connect("scroll_event", _on_scroll)
 
@@ -1533,6 +1605,7 @@ class DelayCalcApp:
                 win.destroy()
             finally:
                 self.chart_window = None
+                self.popup_notebook = None
                 self.popup_plot_channel_buttons = []
                 self.popup_plot_interactions = {}
                 self.popup_status_var = None
@@ -1584,6 +1657,7 @@ class DelayCalcApp:
 
         notebook = ttk.Notebook(tabs_host, style="DelayCharts.TNotebook")
         notebook.pack(fill="both", expand=True)
+        self.popup_notebook = notebook
 
         delay_tab = ctk.CTkFrame(notebook, fg_color=CARD_BG, corner_radius=0)
         conf_tab = ctk.CTkFrame(notebook, fg_color=CARD_BG, corner_radius=0)
@@ -1647,6 +1721,7 @@ class DelayCalcApp:
         )
         status_bar.pack(fill="x", padx=12, pady=(0, 10))
 
+        notebook.bind("<<NotebookTabChanged>>", lambda _event: self._refresh_popup_plot_views())
         self._refresh_popup_plot_channel_buttons_style()
         self._refresh_popup_plot_views()
         self._sync_popup_status()
