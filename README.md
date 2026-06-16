@@ -8,6 +8,8 @@ DelayScope 用于分析多通道音频中各通道相对参考通道的到达时
 
 项目宣传文案见：[docs/promo.md](docs/promo.md)
 
+项目介绍视频：[docs/videos/DelayScope_intro.mp4](docs/videos/DelayScope_intro.mp4)
+
 ## 界面预览
 
 下面截图使用一段合成 6 通道 WAV 演示固定通道延迟、分段统计、置信度和 Delay Drift 图表效果。
